@@ -22,7 +22,7 @@ cache::cache()
 		victimCache[i].lru_position = LRUpos;
 		LRUpos++;
 	}
-	cout << endl;
+	// cout << endl;
 
 	// Do the same for Victim Cache ...
 
@@ -40,68 +40,198 @@ cache::cache()
 void cache::controller(bool MemR, bool MemW, int* data, int adr, int* myMem)
 {
 	// add your code here
-	if (MemW){
-		bitset<32> addrBits(adr);
-		cout << addrBits << endl;
-		int index = ((addrBits & (bitset<32>(0x3C))) >> 2).to_ulong(); //get index which is 4 bits after two-bit offset
-		int tag = (addrBits >> 6).to_ulong(); // get value of upper 26 bits for tag
-		cout << "index: " << index << endl;
-		cout << "tag: " << tag << endl;
 
-		bool L1Hit = false;
-		bool VCHit = false;
- 		
+	bitset<32> addrBits(adr);
+	// cout << addrBits << endl;
+	int index = ((addrBits & (bitset<32>(0x3C))) >> 2).to_ulong(); //get index which is 4 bits after two-bit offset
+	int tag = (addrBits >> 6).to_ulong(); // get value of upper 26 bits for tag
+	// cout << "address: " << adr << endl;
+	// cout << "tag: " << tag << endl;
+	// cout << "index: " << index << endl;
+	
+	bool L1Hit = false;
+	bool VCHit = false;
+	bool L2Hit = false;
+
+	if (MemW){
 		// check if address is in cache
 		if (L1[index].valid && L1[index].tag == tag){
-			cout << "memW found in L1" << endl;
 			L1Hit = true;
 		}
 			
 
 		if (!L1Hit){
 			// search victim cache first
+			bitset<4> indexBits(index);
+			bitset<26> tagBits(tag);
+			bitset<30> indexTagBits(indexBits.to_string() + tagBits.to_string());
+			int indexTag = indexTagBits.to_ulong();
+
+			// cout << "indexBits: " << indexBits << endl;
+			// cout << "tagBits: " << tagBits << endl;
+			// cout << "indexTag: " << indexTagBits<<endl;
 
 			for (int i = 0; i < VICTIM_SIZE; i++){
-				if (victimCache[i].valid && victimCache[i].tag == tag){
+				if (victimCache[i].valid && victimCache[i].tag == indexTag){
 					updateVictimLRU(i);
 					VCHit = true;
-					cout << "memW found in VC" << endl;
 					victimCache[i].data = *data;
 					break;
 				}
 			}
+		}
 
-			// search L2 if not in victim
+		// search L2 if not in victim
 
-			if (!VCHit){
-				for (int i = 0; i < L2_CACHE_WAYS; i++){
-					if (L2[index][i].valid && L2[index][i].tag == tag){
-						updateL2LRU(index, i);
-						L2[index][i].data = *data;
-						cout << "memW found in L2" << endl;
-						break;
-					}
+		if (!VCHit){
+			for (int i = 0; i < L2_CACHE_WAYS; i++){
+				if (L2[index][i].valid && L2[index][i].tag == tag){
+					updateL2LRU(index, i);
+					L2[index][i].data = *data;
+					break;
 				}
 			}
 		}
 
 		myMem[adr] = *data;
-		cout << "myMem at adr: " << adr << " contains data: " << *data << endl << endl;
+		// cout << "myMem at adr: " << adr << " contains data: " << *data << endl << endl;
 	}
-}
+	
+	else if (MemR){
+		// cout << "READ" << endl;
+		if (L1[index].valid && L1[index].tag == tag){
+			// cout << "memR found in L1" << endl << endl;
+			myStat.accL1++;
+			L1Hit = true;
+			return;
+		}
 
-bool cache::updateL1(int* data, int addr, int* myMem){
-	// get the data from memory if needed
-	// unless you get it from controlelr idk
+		if (!L1Hit){
+			myStat.missL1++;
+			bitset<4> indexBits(index);
+			bitset<26> tagBits(tag);
+			bitset<30> indexTagBits(indexBits.to_string() + tagBits.to_string());
+			int indexTag = indexTagBits.to_ulong();
 
-	// calcualte tag index and what not from address
-	// if unable to insert into L1, success = false -> if false, insert into L2
-	bool success = false;
-	bitset<32> addrBits(addr);
-	int tag = (addrBits & (bitset<32>(0xFC000000))).to_ulong();
-	cout << "tag: " << tag << endl;
+			for (int i = 0; i < VICTIM_SIZE; i++){
+				if (victimCache[i].valid && victimCache[i].tag == indexTag){
+					myStat.accVic++;
+					VCHit = true;
+					// cout << "memR found in VC" << endl << endl;;
+					// swap L1 and VC lines
 
-	return success;
+					bitset<32> L1tag(L1[index].tag); // get tag of what is currently in L1
+					int L1data = L1[index].data;
+					
+					// swap L1 tag and data for VC tag and data
+					L1[index].tag = tag;
+					L1[index].data = victimCache[i].data;
+
+					int L1indexTag = (bitset<30>(indexBits.to_string() + L1tag.to_string())).to_ulong(); // get indexTag of what we swapped in L1
+					victimCache[i].tag = L1indexTag;
+					victimCache[i].data = L1data;
+
+					updateVictimLRU(i); // update LRU of victim cache
+					return;
+				}
+			}
+		}
+
+		if (!VCHit){
+			myStat.missVic++;
+			for (int i = 0; i < L2_CACHE_WAYS; i++){
+				if (L2[index][i].valid && L2[index][i].tag == tag){
+					myStat.accL2++;
+					L2Hit = true;
+					// cout << "memR found in L2" << endl << endl;
+
+					bitset<4> indexBits(index);
+					bitset<26> L1tag(L1[index].tag);
+					int L1data = L1[index].data;
+
+					// update L1 to have contents of L2
+					L1[index].tag = tag;
+					L1[index].data = L2[index][i].data;
+
+					L2[index][i].valid = false; // evict L2 line
+
+					// find line in victim cache to put old L1
+					int victimLRU = findVictimLRU();
+					// get tag and index of current victim cache to later put into L2
+					int victimIndex = (bitset<30>(victimCache[victimLRU].tag) >> 26).to_ulong();
+					int victimTag = ((bitset<30>(victimCache[victimLRU].tag) << 4) >> 4).to_ulong();
+					int victimData = victimCache[victimLRU].data;
+
+					int L1indexTag = (bitset<30>(indexBits.to_string() + L1tag.to_string())).to_ulong();
+					victimCache[victimLRU].tag = L1indexTag;
+					victimCache[victimLRU].data = L1data;
+					updateVictimLRU(victimLRU);
+
+					// place evicted victim cache line into L2
+					int L2LRU = findL2LRU(victimIndex);
+					L2[victimIndex][L2LRU].valid = true;
+					L2[victimIndex][L2LRU].tag = victimTag;
+					L2[victimIndex][L2LRU].data = victimData;
+					updateL2LRU(victimIndex, L2LRU);
+
+				}
+			}
+		}
+
+		if (!L2Hit){
+			// cout << "memR had to fetch from mem" << endl << endl;
+			myStat.missL2++;
+			*data = myMem[adr];
+
+			if (!L1[index].valid){
+				L1[index].valid = true;
+				L1[index].tag = tag;
+				L1[index].data = *data;
+			}else{
+				// get tag and data of what is currently in L1
+				bitset<4> indexBits(index);
+				bitset<26> L1tag(L1[index].tag);
+				int L1data = L1[index].data;
+				
+				// update L1 w/ contents from memory
+				L1[index].tag = tag;
+				L1[index].data = *data;
+
+				// put evicted line into VC
+				int victimLRU = findVictimLRU();
+				int victimIndex = (bitset<30>(victimCache[victimLRU].tag) >> 26).to_ulong();
+				int victimTag = ((bitset<30>(victimCache[victimLRU].tag) << 4) >> 4).to_ulong();
+				int victimData = victimCache[victimLRU].data;
+				
+				// cout << "victim LRU: " << victimLRU << endl;
+
+				int L1indexTag = (bitset<30>(indexBits.to_string() + L1tag.to_string())).to_ulong();
+				victimCache[victimLRU].tag = L1indexTag;
+				victimCache[victimLRU].data = L1data;
+				updateVictimLRU(victimLRU);
+
+				if (!victimCache[victimLRU].valid){
+					// cout << "**" << endl;
+					victimCache[victimLRU].valid = true;
+				}else{
+					// put evicted line into L2
+					int L2LRU = findL2LRU(victimIndex);
+					L2[victimIndex][L2LRU].valid = true;
+					L2[victimIndex][L2LRU].tag = victimTag;
+					L2[victimIndex][L2LRU].data = victimData;
+
+					// cout << "placed index: " << victimIndex << " and tag: " << victimTag << " into L2" << endl;
+					updateL2LRU(victimIndex, L2LRU);
+				}
+
+				// cout << "current victim cache: " << endl;
+				// for (int i = 0; i < VICTIM_SIZE; i++){
+				// 	cout << bitset<30>(victimCache[i].tag) << endl;
+				// }
+				// cout << "---" << endl << endl;
+			}
+		}
+	}
 }
 
 void cache::updateVictimLRU(int index){
@@ -116,14 +246,49 @@ void cache::updateVictimLRU(int index){
 	}
 }
 
+int cache::findVictimLRU(){
+	for (int i = 0; i < VICTIM_SIZE; i++){
+		if (!victimCache[i].valid)
+			return i;
+		else if (victimCache[i].lru_position == 0)
+			return i;
+	}
+	return 0;
+}
+
 void cache::updateL2LRU(int set, int way){
 	if (L2[set][way].lru_position != 7){
 		for (int i = 0; i < L2_CACHE_WAYS; i++){
 			if (i != way){
 				if (L2[set][i].lru_position > L2[set][way].lru_position)
-					L2[set][i].lru_position --;
+					L2[set][i].lru_position--;
 			}
 		}
 		L2[set][way].lru_position = 7;
 	}
+}
+
+int cache::findL2LRU(int index){
+	for (int i = 0; i < L2_CACHE_WAYS; i++){
+		if (!L2[index][i].valid)
+			return i;
+		else if (L2[index][i].lru_position == 0)
+			return i;
+	}
+	return 0;
+}
+
+double cache::L1missRate(){
+	// cout << (double(myStat.missL1)/double(myStat.missL1 + myStat.accL1)) << endl;
+	return (double(myStat.missL1)/double(myStat.missL1 + myStat.accL1));
+}
+
+double cache::L2missRate(){
+	// cout << (double(myStat.missL2)/double(myStat.missL2 + myStat.accL2)) << endl;
+	return (double(myStat.missL2)/double(myStat.missL2 + myStat.accL2));
+}
+
+double cache::VCmissRate(){
+	// cout << (double(myStat.missVic)/double(myStat.missVic + myStat.accVic)) << endl;
+	return (double(myStat.missVic)/double(myStat.missVic + myStat.accVic));
 }

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include<stdlib.h>
 #include <string>
+#include <iomanip>
 using namespace std;
 
 #define L1_CACHE_SETS 16
@@ -50,6 +51,12 @@ public:
 	bool updateL1(int* data, int addr, int* myMem);
 	void updateVictimLRU(int index);
 	void updateL2LRU(int set, int way);
+	int findVictimLRU();
+	int findL2LRU(int index);
+	
+	double L1missRate();
+	double L2missRate();
+	double VCmissRate();
 };
 
 

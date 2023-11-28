@@ -8,6 +8,7 @@
         "vector": "cpp",
         "variant": "cpp",
         "chrono": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "fstream": "cpp"
     }
 }

@@ -73,19 +73,19 @@ int main (int argc, char* argv[]) // the program runs like this: ./program <file
 		cur_MemW = myTrace[traceCounter].MemW;
 		cur_data = myTrace[traceCounter].data;
 		cur_adr = myTrace[traceCounter].adr;
-		// cout << "cur_MemR: " << cur_MemR << endl;
-		// cout << "cur_MemW: " << cur_MemW << endl;
-		// cout << "cur_data: " << cur_data << endl;
-		// cout << "cur_adr: " << cur_adr << endl;
-		// cout << endl;
 		traceCounter += 1;
 		myCache.controller (cur_MemR, cur_MemW, &cur_data, cur_adr, myMem); // in your memory controller you need to implement your FSM, LW, SW, and MM. 
 	}
 	
-	float L1_miss_rate, L2_miss_rate, AAT; 
+	double L1_miss_rate, L2_miss_rate, VC_miss_rate, AAT; 
 	//compute the stats here:
+	L1_miss_rate = myCache.L1missRate();
+	L2_miss_rate = myCache.L2missRate();
+	VC_miss_rate = myCache.VCmissRate();
 
-	cout<< "(" << L1_miss_rate<<","<<L2_miss_rate<<","<<AAT<<")"<<endl;
+	AAT = 1 + L1_miss_rate*(1 + VC_miss_rate*(8 + L2_miss_rate*100));
+
+	cout<< std::setprecision(10) << "(" << L1_miss_rate<<","<<L2_miss_rate<<","<<AAT<<")"<<endl;
 
 	// closing the file
 	fin.close();
