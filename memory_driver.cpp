@@ -73,6 +73,11 @@ int main (int argc, char* argv[]) // the program runs like this: ./program <file
 		cur_MemW = myTrace[traceCounter].MemW;
 		cur_data = myTrace[traceCounter].data;
 		cur_adr = myTrace[traceCounter].adr;
+		// cout << "cur_MemR: " << cur_MemR << endl;
+		// cout << "cur_MemW: " << cur_MemW << endl;
+		// cout << "cur_data: " << cur_data << endl;
+		// cout << "cur_adr: " << cur_adr << endl;
+		// cout << endl;
 		traceCounter += 1;
 		myCache.controller (cur_MemR, cur_MemW, &cur_data, cur_adr, myMem); // in your memory controller you need to implement your FSM, LW, SW, and MM. 
 	}

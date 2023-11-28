@@ -39,6 +39,7 @@ private:
 	cacheBlock L1[L1_CACHE_SETS]; // 1 set per row.
 	cacheBlock L2[L2_CACHE_SETS][L2_CACHE_WAYS]; // x ways per row 
 	// Add your Victim cache here ...
+	cacheBlock victimCache[VICTIM_SIZE];
 	
 	Stat myStat;
 	// add more things here
@@ -46,6 +47,9 @@ public:
 	cache();
 	void controller(bool MemR, bool MemW, int* data, int adr, int* myMem);
 	// add more functions here ...	
+	bool updateL1(int* data, int addr, int* myMem);
+	void updateVictimLRU(int index);
+	void updateL2LRU(int set, int way);
 };
 
 
